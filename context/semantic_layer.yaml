@@ -1,0 +1,185 @@
+# Camada de contexto (semântica) sobre o schema `raw` do Postgres --
+# mesmo papel do semantic_layer.yaml da Atividade didática RAG 2, agora
+# apontando pra tabelas reais em Postgres em vez de CSVs via DuckDB.
+#
+# Cada tabela e métrica vira um "chunk" recuperável por embeddings (ver
+# mcp_server/retrieval.py) -- é o que dá ao agente LangChain contexto de
+# schema pra decidir que SQL escrever, sem precisar adivinhar nomes de
+# coluna.
+
+tables:
+  orders:
+    description: >
+      Pedidos feitos na plataforma Olist. Uma linha por pedido, com o
+      status e a data/hora de cada etapa do ciclo de vida: compra,
+      aprovação do pagamento, entrega à transportadora, entrega ao
+      cliente e a data estimada de entrega prometida.
+    synonyms: [pedido, pedidos, compra, compras, venda, vendas]
+    columns:
+      order_id: {type: text, description: "Identificador único do pedido."}
+      customer_id: {type: text, description: "Cliente que fez o pedido (chave para customers -- é específico do pedido, não é o cliente 'real')."}
+      order_status: {type: text, description: "Status do pedido: delivered, shipped, canceled, processing, etc."}
+      order_purchase_timestamp: {type: timestamp, description: "Data/hora em que a compra foi feita."}
+      order_approved_at: {type: timestamp, description: "Data/hora em que o pagamento foi aprovado."}
+      order_delivered_carrier_date: {type: timestamp, description: "Data em que o pedido foi entregue à transportadora."}
+      order_delivered_customer_date: {type: timestamp, description: "Data em que o pedido chegou de fato ao cliente."}
+      order_estimated_delivery_date: {type: timestamp, description: "Data estimada/prometida de entrega ao cliente."}
+
+  customers:
+    description: >
+      Localização dos clientes que fizeram pedidos. `customer_id` é
+      específico de cada pedido; `customer_unique_id` identifica a pessoa
+      de fato através de vários pedidos.
+    synonyms: [cliente, clientes, comprador, compradores]
+    columns:
+      customer_id: {type: text, description: "Chave usada em orders.customer_id -- muda a cada pedido do mesmo cliente."}
+      customer_unique_id: {type: text, description: "Identificador estável do cliente entre pedidos diferentes."}
+      customer_zip_code_prefix: {type: text, description: "Prefixo do CEP do cliente."}
+      customer_city: {type: text, description: "Cidade do cliente."}
+      customer_state: {type: text, description: "Estado (UF) do cliente."}
+
+  order_items:
+    description: >
+      Itens de cada pedido -- um pedido pode ter vários itens (linhas),
+      cada um com seu preço, valor de frete, produto e vendedor.
+    synonyms: [item, itens, produto vendido, preço, frete]
+    columns:
+      order_id: {type: text, description: "Pedido ao qual o item pertence."}
+      order_item_id: {type: integer, description: "Número sequencial do item dentro do pedido."}
+      product_id: {type: text, description: "Produto vendido (chave para products)."}
+      seller_id: {type: text, description: "Vendedor responsável pelo item (chave para sellers)."}
+      shipping_limit_date: {type: timestamp, description: "Prazo limite para o vendedor despachar o item."}
+      price: {type: numeric, description: "Preço do item (sem frete)."}
+      freight_value: {type: numeric, description: "Valor do frete cobrado para este item."}
+
+  order_payments:
+    description: >
+      Forma(s) de pagamento usadas em cada pedido -- um pedido pode ter
+      mais de um método de pagamento combinado.
+    synonyms: [pagamento, pagamentos, parcelamento, parcelas, cartão, boleto, voucher]
+    columns:
+      order_id: {type: text, description: "Pedido pago."}
+      payment_sequential: {type: integer, description: "Ordem do método de pagamento quando há mais de um no mesmo pedido."}
+      payment_type: {type: text, description: "Tipo de pagamento: credit_card, boleto, voucher, debit_card."}
+      payment_installments: {type: integer, description: "Número de parcelas."}
+      payment_value: {type: numeric, description: "Valor pago nesse método."}
+
+  reviews:
+    description: >
+      Avaliações (reviews) deixadas pelos clientes para os pedidos, com
+      nota de 1 a 5 e comentário opcional. Extraído do MongoDB e
+      materializado aqui -- ver projeto "Desenvolvimento de app similar
+      ao olist" (ingest/sync_mongo_to_raw.py).
+    synonyms: [avaliação, avaliações, review, reviews, nota, satisfação]
+    columns:
+      review_id: {type: text, description: "Identificador da avaliação (não é único -- ver nota de qualidade de dados)."}
+      order_id: {type: text, description: "Pedido avaliado."}
+      review_score: {type: integer, description: "Nota de 1 (péssimo) a 5 (ótimo)."}
+      review_comment_title: {type: text, description: "Título do comentário (opcional, pode ser nulo)."}
+      review_comment_message: {type: text, description: "Texto do comentário (opcional, pode ser nulo)."}
+      review_creation_date: {type: timestamp, description: "Data em que a avaliação foi solicitada/criada."}
+      review_answer_timestamp: {type: timestamp, description: "Data em que o cliente respondeu a avaliação."}
+
+  support_tickets:
+    description: >
+      Tickets de suporte -- dado SINTÉTICO (gerado com Faker), não existe
+      no dataset original da Olist. Simula um sistema de atendimento
+      ligado a pedidos reais por order_id.
+    synonyms: [ticket, tickets, suporte, atendimento, reclamação]
+    columns:
+      ticket_id: {type: text, description: "Identificador do ticket."}
+      order_id: {type: text, description: "Pedido relacionado ao ticket."}
+      channel: {type: text, description: "Canal de abertura: chat, email, telefone."}
+      category: {type: text, description: "Categoria: atraso na entrega, produto com defeito, etc."}
+      priority: {type: text, description: "Prioridade: baixa, media, alta."}
+      status: {type: text, description: "Status: aberto, em andamento, resolvido."}
+      customer_message: {type: text, description: "Mensagem do cliente (texto livre, gerado por Faker)."}
+      created_at: {type: timestamp, description: "Data de abertura do ticket."}
+      resolved_at: {type: timestamp, description: "Data de resolução (nula se o ticket não foi resolvido)."}
+
+  products:
+    description: >
+      Catálogo de produtos, com categoria e dimensões físicas (peso,
+      altura, largura, comprimento) usadas no cálculo de frete.
+    synonyms: [produto, produtos, categoria, categorias, catálogo]
+    columns:
+      product_id: {type: text, description: "Identificador do produto."}
+      product_category_name: {type: text, description: "Categoria do produto, em português (chave para category_translation)."}
+      product_weight_g: {type: numeric, description: "Peso do produto em gramas."}
+      product_length_cm: {type: numeric, description: "Comprimento do produto em cm."}
+      product_height_cm: {type: numeric, description: "Altura do produto em cm."}
+      product_width_cm: {type: numeric, description: "Largura do produto em cm."}
+
+  sellers:
+    description: >
+      Vendedores (lojistas) cadastrados na plataforma, com localização.
+    synonyms: [vendedor, vendedores, lojista, lojistas, seller, sellers]
+    columns:
+      seller_id: {type: text, description: "Identificador do vendedor."}
+      seller_zip_code_prefix: {type: text, description: "Prefixo do CEP do vendedor."}
+      seller_city: {type: text, description: "Cidade do vendedor."}
+      seller_state: {type: text, description: "Estado (UF) do vendedor."}
+
+  category_translation:
+    description: >
+      Tradução do nome da categoria de produto, de português para inglês.
+      Atenção: 2 categorias de products.product_category_name não existem
+      aqui (pc_gamer, portateis_cozinha_e_preparadores_de_alimentos) --
+      use LEFT JOIN, nunca JOIN, pra não perder produtos dessas categorias.
+    synonyms: [tradução de categoria, categoria em inglês]
+    columns:
+      product_category_name: {type: text, description: "Nome da categoria em português."}
+      product_category_name_english: {type: text, description: "Nome da categoria em inglês."}
+
+  geolocation:
+    description: >
+      Coordenadas geográficas (latitude/longitude) aproximadas por
+      prefixo de CEP -- várias linhas por prefixo.
+    synonyms: [localização, geolocalização, coordenadas, latitude, longitude, cep]
+    columns:
+      geolocation_zip_code_prefix: {type: text, description: "Prefixo do CEP."}
+      geolocation_lat: {type: numeric, description: "Latitude aproximada."}
+      geolocation_lng: {type: numeric, description: "Longitude aproximada."}
+      geolocation_city: {type: text, description: "Cidade associada ao CEP."}
+      geolocation_state: {type: text, description: "Estado (UF) associado ao CEP."}
+
+relationships:
+  - {from: orders.customer_id, to: customers.customer_id}
+  - {from: order_items.order_id, to: orders.order_id}
+  - {from: order_items.product_id, to: products.product_id}
+  - {from: order_items.seller_id, to: sellers.seller_id}
+  - {from: order_payments.order_id, to: orders.order_id}
+  - {from: reviews.order_id, to: orders.order_id}
+  - {from: support_tickets.order_id, to: orders.order_id}
+  - {from: products.product_category_name, to: category_translation.product_category_name}
+
+metrics:
+  receita_total:
+    description: "Soma de preço + frete de todos os itens vendidos."
+    tables: [order_items]
+    sql: "SELECT SUM(price + freight_value) FROM raw.order_items"
+
+  ticket_medio:
+    description: "Valor médio por pedido (produtos + frete), agrupando os itens por order_id antes de tirar a média."
+    tables: [order_items]
+    sql: "SELECT AVG(order_total) FROM (SELECT order_id, SUM(price + freight_value) AS order_total FROM raw.order_items GROUP BY order_id) t"
+
+  tempo_medio_entrega:
+    description: "Média de dias entre a compra e a entrega ao cliente, só pedidos já entregues."
+    tables: [orders]
+    sql: "SELECT AVG(order_delivered_customer_date - order_purchase_timestamp) FROM raw.orders WHERE order_delivered_customer_date IS NOT NULL"
+
+  taxa_atraso:
+    description: "Percentual de pedidos entregues em que a entrega real foi depois da data estimada."
+    tables: [orders]
+    sql: "SELECT 100.0 * SUM(CASE WHEN order_delivered_customer_date > order_estimated_delivery_date THEN 1 ELSE 0 END) / COUNT(*) FROM raw.orders WHERE order_delivered_customer_date IS NOT NULL"
+
+  nota_media_avaliacao:
+    description: "Média das notas (1 a 5) dadas pelos clientes nas avaliações."
+    tables: [reviews]
+    sql: "SELECT AVG(review_score) FROM raw.reviews"
+
+  tickets_por_status:
+    description: "Quantidade de tickets de suporte sintéticos por status (aberto, em andamento, resolvido)."
+    tables: [support_tickets]
+    sql: "SELECT status, COUNT(*) FROM raw.support_tickets GROUP BY status"

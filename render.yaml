@@ -1,0 +1,28 @@
+# Blueprint do Render -- define o serviço web que hospeda as duas
+# interfaces (chat + feed em tempo real). O servidor MCP não é um
+# serviço separado: roda como subprocesso (stdio) dentro deste mesmo
+# serviço, iniciado pelo agente (rag/agent.py) a cada pergunta -- não
+# precisa de rede entre serviços.
+#
+# As variáveis marcadas `sync: false` precisam ser preenchidas manualmente
+# no painel do Render (Environment) -- nunca ficam neste arquivo, que é
+# versionado.
+
+services:
+  - type: web
+    name: olist-project
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn web.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OLIST_PG_DSN
+        sync: false
+      - key: OLIST_PG_READER_DSN
+        sync: false
+      - key: SITE_PASSWORD
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.13"

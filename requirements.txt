@@ -1,0 +1,24 @@
+# ingestão (CSV + MongoDB -> Postgres)
+pandas
+pyyaml
+python-dotenv
+psycopg2-binary
+pymongo
+Faker
+kagglehub[pandas-datasets]
+
+# embeddings (camada de contexto / retrieval)
+sentence-transformers
+
+# MCP (servidor + cliente)
+mcp
+
+# LangChain (agente que consome o MCP)
+langchain
+langchain-core
+langchain-anthropic
+langchain-mcp-adapters
+
+# interface web (chat)
+fastapi
+uvicorn[standard]
