@@ -9,6 +9,7 @@ Rodar com:
 Abre em http://localhost:8010 -- a própria API serve o site (web/static/).
 """
 
+import contextlib
 import os
 
 from dotenv import load_dotenv
@@ -19,12 +20,23 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from rag.agent import ask
+from rag.agent import _get_agent, aclose_agent, ask
 from web.auth import BasicAuthMiddleware
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
-app = FastAPI(title="Olist RAG -- chat")
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Monta o agente (e abre o processo do servidor MCP) uma vez, no
+    # startup -- sem isso, quem paga o custo de carregar o modelo de
+    # embeddings seria a primeira pergunta de um usuário de verdade.
+    await _get_agent()
+    yield
+    await aclose_agent()
+
+
+app = FastAPI(title="Olist RAG -- chat", lifespan=lifespan)
 app.add_middleware(BasicAuthMiddleware)
 
 

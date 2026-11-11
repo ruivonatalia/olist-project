@@ -18,6 +18,7 @@ Rodar com:
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import re
@@ -30,6 +31,7 @@ load_dotenv()
 from langchain.agents import create_agent
 from langchain_anthropic import ChatAnthropic
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -167,22 +169,54 @@ def _build_plotly_chart(spec: dict | None, sql_result: dict | None) -> dict | No
     }
 
 
-async def build_agent():
-    client = MultiServerMCPClient({
-        "olist": {
-            "transport": "stdio",
-            "command": sys.executable,
-            "args": ["-m", "mcp_server.server"],
-            "cwd": REPO_ROOT,
-        }
-    })
-    tools = await client.get_tools()
-    model = ChatAnthropic(model="claude-sonnet-5")
-    return create_agent(model, tools, system_prompt=SYSTEM_PROMPT)
+# `MultiServerMCPClient.get_tools()` sem sessão explícita abre um
+# subprocesso do servidor MCP NOVO a cada chamada de ferramenta (ver
+# docstring da lib: "a new session will be created for each tool call")
+# -- ruim aqui porque o servidor reimporta torch/sentence-transformers e
+# recarrega o modelo de embeddings toda vez. Em vez disso, abrimos UMA
+# sessão (um processo) e mantemos viva pela vida do processo web inteiro,
+# reaproveitada por todas as perguntas -- é só isso que _get_agent() e
+# aclose_agent() fazem.
+_agent_lock = asyncio.Lock()
+_cached_agent = None
+_exit_stack: contextlib.AsyncExitStack | None = None
+
+
+async def _get_agent():
+    global _cached_agent, _exit_stack
+    if _cached_agent is not None:
+        return _cached_agent
+    async with _agent_lock:
+        if _cached_agent is not None:  # outra requisição pode ter montado enquanto esperava o lock
+            return _cached_agent
+        client = MultiServerMCPClient({
+            "olist": {
+                "transport": "stdio",
+                "command": sys.executable,
+                "args": ["-m", "mcp_server.server"],
+                "cwd": REPO_ROOT,
+            }
+        })
+        stack = contextlib.AsyncExitStack()
+        session = await stack.enter_async_context(client.session("olist"))
+        tools = await load_mcp_tools(session)
+        model = ChatAnthropic(model="claude-sonnet-5")
+        _cached_agent = create_agent(model, tools, system_prompt=SYSTEM_PROMPT)
+        _exit_stack = stack
+        return _cached_agent
+
+
+async def aclose_agent():
+    """Encerra o processo do servidor MCP -- chamar no shutdown da app."""
+    global _cached_agent, _exit_stack
+    if _exit_stack is not None:
+        await _exit_stack.aclose()
+    _cached_agent = None
+    _exit_stack = None
 
 
 async def ask(question: str) -> dict:
-    agent = await build_agent()
+    agent = await _get_agent()
     result = await agent.ainvoke({"messages": [{"role": "user", "content": question}]})
     raw_answer = _extract_text(result["messages"][-1])
     answer, viz_spec = _extract_viz_spec(raw_answer)
@@ -210,6 +244,7 @@ async def main():
         print(f"\n[gráfico] {result['chart']['data'][0]['type']}")
     if result["table"]:
         print(f"[tabela] {len(result['table']['rows'])} linhas, colunas: {result['table']['columns']}")
+    await aclose_agent()
 
 
 if __name__ == "__main__":
