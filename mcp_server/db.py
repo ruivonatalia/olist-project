@@ -12,8 +12,16 @@ import os
 
 import psycopg2
 
-OWNER_DSN = os.environ.get("OLIST_PG_DSN", "dbname=olist host=/tmp")
-READER_DSN = os.environ.get("OLIST_PG_READER_DSN", "dbname=olist host=/tmp user=rag_reader password=rag_reader_local_dev")
+def _env_dsn(key: str, default: str) -> str:
+    # .strip() porque é fácil colar a connection string com uma quebra de
+    # linha sobrando num campo de ambiente (Render, etc) -- sem isso, o
+    # \n vira parte do nome do banco e psycopg2 falha com um erro
+    # confuso ("database \"postgres\n\" does not exist").
+    return os.environ.get(key, default).strip()
+
+
+OWNER_DSN = _env_dsn("OLIST_PG_DSN", "dbname=olist host=/tmp")
+READER_DSN = _env_dsn("OLIST_PG_READER_DSN", "dbname=olist host=/tmp user=rag_reader password=rag_reader_local_dev")
 
 
 def get_owner_conn() -> psycopg2.extensions.connection:
