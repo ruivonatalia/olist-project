@@ -1,8 +1,11 @@
-# Blueprint do Render -- define o serviço web que hospeda as duas
-# interfaces (chat + feed em tempo real). O servidor MCP não é um
-# serviço separado: roda como subprocesso (stdio) dentro deste mesmo
-# serviço, iniciado pelo agente (rag/agent.py) a cada pergunta -- não
-# precisa de rede entre serviços.
+# Blueprint do Render. O servidor MCP não é um serviço separado: roda
+# como subprocesso (stdio) dentro deste mesmo serviço, aberto uma vez no
+# startup (ver rag/agent.py) -- não precisa de rede entre serviços.
+#
+# Disco persistente em /data: sem ele, o container perde o cache do
+# modelo de embeddings (Hugging Face) a cada deploy/restart, e
+# sentence-transformers baixa tudo de novo -- só funciona em planos pagos
+# (o free não suporta disco).
 #
 # As variáveis marcadas `sync: false` precisam ser preenchidas manualmente
 # no painel do Render (Environment) -- nunca ficam neste arquivo, que é
@@ -12,10 +15,16 @@ services:
   - type: web
     name: olist-project
     runtime: python
-    plan: free
+    plan: standard
     buildCommand: "pip install -r requirements.txt"
     startCommand: "uvicorn web.main:app --host 0.0.0.0 --port $PORT"
+    disk:
+      name: hf-cache
+      mountPath: /data
+      sizeGB: 2
     envVars:
+      - key: HF_HOME
+        value: /data/hf-cache
       - key: ANTHROPIC_API_KEY
         sync: false
       - key: OLIST_PG_DSN
