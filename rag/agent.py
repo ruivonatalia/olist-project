@@ -284,8 +284,21 @@ async def ask(question: str) -> dict:
     table = _build_table(sql_result)
     chart = _build_plotly_chart(viz_spec, sql_result)
 
+    # args por tool_call_id -- é a AIMessage que decide chamar a
+    # ferramenta que carrega os argumentos (ex: args["sql"] no run_sql);
+    # a ToolMessage correspondente só tem o resultado.
+    args_by_id = {
+        tc["id"]: tc.get("args", {})
+        for m in result["messages"]
+        if getattr(m, "type", None) == "ai"
+        for tc in (getattr(m, "tool_calls", None) or [])
+    }
     tool_calls = [
-        {"tool": m.name, "result_preview": str(m.content)[:200]}
+        {
+            "tool": m.name,
+            "args": args_by_id.get(getattr(m, "tool_call_id", None), {}),
+            "result_preview": str(m.content)[:200],
+        }
         for m in result["messages"]
         if getattr(m, "type", None) == "tool"
     ]

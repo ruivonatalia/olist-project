@@ -10,10 +10,12 @@ Abre em http://localhost:8010 -- a própria API serve o site (web/static/).
 """
 
 import contextlib
+import json
 import os
 from datetime import datetime, timezone
 
 import psycopg2
+import psycopg2.extras
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -47,20 +49,21 @@ class AskIn(BaseModel):
     question: str
 
 
-def _tag_original_question(question: str, since: datetime) -> None:
+def _tag_request_log(question: str, tool_calls: list, since: datetime) -> None:
     """search_context loga o que o MODELO mandou pra ele (às vezes
     reformulado) em app.rag_query_log -- só a camada web vê o texto
-    literal que o usuário digitou, então é aqui que ele é gravado,
-    marcando as linhas criadas durante esta chamada (que ainda não têm
-    original_question). Falha de log nunca deve derrubar a resposta pro
-    usuário -- por isso o try/except."""
+    literal que o usuário digitou e a trilha completa de ferramentas
+    (incluindo o SQL real do run_sql), então é aqui que os dois são
+    gravados, marcando as linhas criadas durante esta chamada (que ainda
+    não têm original_question). Falha de log nunca deve derrubar a
+    resposta pro usuário -- por isso o try/except."""
     try:
         conn = psycopg2.connect(OWNER_DSN)
         with conn.cursor() as cur:
             cur.execute(
-                "UPDATE app.rag_query_log SET original_question = %s "
+                "UPDATE app.rag_query_log SET original_question = %s, tool_trace = %s "
                 "WHERE created_at >= %s AND original_question IS NULL",
-                (question, since),
+                (question, json.dumps(tool_calls, ensure_ascii=False), since),
             )
         conn.commit()
         conn.close()
@@ -74,7 +77,7 @@ async def api_ask(payload: AskIn):
     run_sql via MCP) e devolve a resposta final."""
     since = datetime.now(timezone.utc)
     result = await ask(payload.question)
-    _tag_original_question(payload.question, since)
+    _tag_request_log(payload.question, result["tool_calls"], since)
     return result
 
 

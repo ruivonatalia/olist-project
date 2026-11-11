@@ -29,6 +29,12 @@ CREATE TABLE IF NOT EXISTS app.rag_query_log (
     question_embedding  double precision[] NOT NULL,
     chunks              jsonb NOT NULL,   -- [{kind, name, score, text}, ...], mais relevante primeiro
     top_score           double precision,
+    -- Trilha completa de ferramentas da pergunta inteira (não só deste
+    -- search_context): [{tool, args, result_preview}, ...] na ordem em
+    -- que o agente chamou -- pra run_sql, args.sql é a consulta de
+    -- verdade que rodou. Preenchido pela camada web, igual
+    -- original_question (ver web/main.py).
+    tool_trace          jsonb,
     created_at          timestamp NOT NULL DEFAULT now()
 );
 
