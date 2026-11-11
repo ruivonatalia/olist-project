@@ -60,15 +60,28 @@ SYSTEM_PROMPT = (
     "pizza. Não inclua o bloco quando a resposta for um único número "
     "(ex: uma média geral). No máximo ~15 categorias em bar -- se a "
     "consulta puder devolver mais, agrupe as menores em 'Outros' no "
-    "próprio SQL ou use LIMIT com ORDER BY."
+    "próprio SQL ou use LIMIT com ORDER BY.\n\n"
+    "Se o resultado tiver uma TERCEIRA coluna categórica (ex: evolução "
+    "de um valor por mês E por categoria/produto ao mesmo tempo), "
+    "acrescente \"group\": \"<coluna categórica>\" no JSON -- isso desenha "
+    "uma linha/barra por categoria, cada uma com uma cor. Nesse caso, "
+    "limite a consulta SQL a no máximo 8 categorias (as de maior valor, "
+    "via ORDER BY + LIMIT ou um filtro WHERE categoria IN (...)) -- mais "
+    "que isso fica ilegível e as cores deixam de ser distinguíveis."
 )
 
 _VIZ_BLOCK = re.compile(r"```viz\s*(\{.*?\})\s*```", re.DOTALL)
 
-# Paleta categórica validada (skill de dataviz) -- série única em todo
-# gráfico deste app, então sempre o slot 1 (azul): com 1 série não existe
-# par adjacente pra falhar o teste de daltonismo.
+# Paleta categórica validada (skill de dataviz), ordem fixa -- sem grupo,
+# sempre o slot 1 (azul); com grupo, cada categoria pega o próximo slot,
+# sempre na mesma ordem (nunca sorteada), até o teto de 8 (acima disso a
+# paleta deixa de ser daltônico-segura, daí o corte no prompt/código).
 _SERIES_COLOR = "#2a78d6"
+_CATEGORICAL_PALETTE = [
+    "#2a78d6", "#eb6834", "#1baf7a", "#eda100",
+    "#e87ba4", "#008300", "#4a3aa7", "#e34948",
+]
+_MAX_GROUPS = len(_CATEGORICAL_PALETTE)
 
 
 def _extract_text(message) -> str:
@@ -128,34 +141,62 @@ def _build_table(sql_result: dict | None) -> dict | None:
     return sql_result
 
 
+def _make_trace(chart_type: str, x_vals: list, y_vals: list, color: str, name: str | None) -> dict:
+    trace: dict = {"name": name} if name else {}
+    if chart_type == "scatter":
+        trace |= {"type": "scatter", "mode": "markers", "x": x_vals, "y": y_vals,
+                  "marker": {"color": color, "size": 8}}
+    elif chart_type == "line":
+        trace |= {"type": "scatter", "mode": "lines+markers", "x": x_vals, "y": y_vals,
+                  "line": {"color": color, "width": 2},
+                  "marker": {"color": color, "size": 6}}
+    else:  # bar
+        trace |= {"type": "bar", "x": x_vals, "y": y_vals, "marker": {"color": color}}
+    return trace
+
+
 def _build_plotly_chart(spec: dict | None, sql_result: dict | None) -> dict | None:
     """Monta a figura Plotly (formato {data, layout}) a partir dos dados
-    reais do run_sql (não do que o modelo escreveu) + do spec (tipo e
-    quais colunas usar)."""
+    reais do run_sql (não do que o modelo escreveu) + do spec (tipo,
+    quais colunas usar e, opcionalmente, qual coluna vira uma série por
+    categoria -- "group")."""
     if not spec or not sql_result:
         return None
     rows = sql_result["rows"]
     columns = set(sql_result["columns"])
-    x_col, y_col = spec["x"], spec["y"]
+    chart_type = spec["type"]
+    x_col, y_col, group_col = spec["x"], spec["y"], spec.get("group")
     if x_col not in columns or y_col not in columns or not rows:
         return None
+    if group_col and group_col not in columns:
+        group_col = None
 
-    x_vals = [r[x_col] for r in rows]
-    y_vals = [r[y_col] for r in rows]
     title = spec.get("title") or f"{y_col} por {x_col}"
 
-    if spec["type"] == "scatter":
-        trace = {"type": "scatter", "mode": "markers", "x": x_vals, "y": y_vals,
-                  "marker": {"color": _SERIES_COLOR, "size": 8}}
-    elif spec["type"] == "line":
-        trace = {"type": "scatter", "mode": "lines+markers", "x": x_vals, "y": y_vals,
-                  "line": {"color": _SERIES_COLOR, "width": 2},
-                  "marker": {"color": _SERIES_COLOR, "size": 6}}
-    else:  # bar
-        trace = {"type": "bar", "x": x_vals, "y": y_vals, "marker": {"color": _SERIES_COLOR}}
+    if group_col:
+        # Ordem de primeira aparição (não alfabética) -- geralmente já
+        # reflete a relevância que a própria consulta SQL definiu
+        # (ex: ORDER BY receita DESC). Corta em _MAX_GROUPS: acima disso
+        # a paleta categórica deixa de garantir pares distinguíveis por
+        # daltônicos (ver skill de dataviz).
+        groups = list(dict.fromkeys(r[group_col] for r in rows))[:_MAX_GROUPS]
+        data = [
+            _make_trace(
+                chart_type,
+                [r[x_col] for r in rows if r[group_col] == g],
+                [r[y_col] for r in rows if r[group_col] == g],
+                _CATEGORICAL_PALETTE[i % len(_CATEGORICAL_PALETTE)],
+                str(g),
+            )
+            for i, g in enumerate(groups)
+        ]
+    else:
+        x_vals = [r[x_col] for r in rows]
+        y_vals = [r[y_col] for r in rows]
+        data = [_make_trace(chart_type, x_vals, y_vals, _SERIES_COLOR, None)]
 
     return {
-        "data": [trace],
+        "data": data,
         "layout": {
             "title": {"text": title, "font": {"size": 14, "color": "#1c2228"}},
             "xaxis": {"title": x_col, "gridcolor": "#eceee9", "zeroline": False},
@@ -165,6 +206,7 @@ def _build_plotly_chart(spec: dict | None, sql_result: dict | None) -> dict | No
             "font": {"family": "Inter, -apple-system, sans-serif", "color": "#68706a", "size": 12},
             "margin": {"t": 44, "r": 20, "b": 48, "l": 56},
             "bargap": 0.35,
+            "legend": {"orientation": "h", "y": -0.22, "font": {"size": 11}},
         },
     }
 
