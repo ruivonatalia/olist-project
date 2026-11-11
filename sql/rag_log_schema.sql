@@ -19,6 +19,11 @@ CREATE SCHEMA IF NOT EXISTS app;
 CREATE TABLE IF NOT EXISTS app.rag_query_log (
     id                  serial PRIMARY KEY,
     question            text NOT NULL,
+    -- `question` é o que o MODELO mandou pro search_context (às vezes
+    -- reformulado); `original_question` é o texto literal que o usuário
+    -- digitou no chat -- preenchido pela camada web (web/main.py), que é
+    -- a única que vê o texto original, não pelo servidor MCP.
+    original_question   text,
     embedding_model     text NOT NULL,
     embedding_dim       integer NOT NULL,
     question_embedding  double precision[] NOT NULL,
