@@ -195,6 +195,12 @@ def _build_plotly_chart(spec: dict | None, sql_result: dict | None) -> dict | No
         y_vals = [r[y_col] for r in rows]
         data = [_make_trace(chart_type, x_vals, y_vals, _SERIES_COLOR, None)]
 
+    # Legenda vertical, do lado direito, só quando há mais de uma série --
+    # com 1 série o título já diz o que é (ver skill de dataviz). Vertical
+    # + lateral em vez de horizontal embaixo: a altura que ocupa não
+    # depende de quanto a legenda "quebra linha", que é imprevisível e
+    # foi o que colidia com o eixo x antes.
+    multi = len(data) > 1
     return {
         "data": data,
         "layout": {
@@ -204,9 +210,10 @@ def _build_plotly_chart(spec: dict | None, sql_result: dict | None) -> dict | No
             "paper_bgcolor": "rgba(0,0,0,0)",
             "plot_bgcolor": "rgba(0,0,0,0)",
             "font": {"family": "Inter, -apple-system, sans-serif", "color": "#68706a", "size": 12},
-            "margin": {"t": 44, "r": 20, "b": 48, "l": 56},
+            "margin": {"t": 44, "r": 150 if multi else 20, "b": 48, "l": 56},
             "bargap": 0.35,
-            "legend": {"orientation": "h", "y": -0.22, "font": {"size": 11}},
+            "showlegend": multi,
+            "legend": {"orientation": "v", "x": 1.02, "xanchor": "left", "y": 1, "yanchor": "top", "font": {"size": 11}},
         },
     }
 
