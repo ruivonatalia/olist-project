@@ -195,6 +195,16 @@ async def _get_agent():
                 "command": sys.executable,
                 "args": ["-m", "mcp_server.server"],
                 "cwd": REPO_ROOT,
+                # Sem isso, o SDK do MCP NÃO repassa as variáveis de ambiente
+                # do processo pai pro subprocesso -- só uma lista fixa de
+                # variáveis do sistema (HOME, PATH, etc). Em produção (sem
+                # .env no disco) o servidor MCP ficaria sem OLIST_PG_DSN e
+                # cairia no padrão de desenvolvimento local.
+                "env": {
+                    k: os.environ[k]
+                    for k in ("OLIST_PG_DSN", "OLIST_PG_READER_DSN")
+                    if os.environ.get(k)
+                },
             }
         })
         stack = contextlib.AsyncExitStack()
