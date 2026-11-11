@@ -1,5 +1,7 @@
 # Olist Project
 
+**App no ar:** [olist-project.onrender.com](https://olist-project.onrender.com)
+
 Chat web que responde perguntas em português sobre o dataset público da
 Olist (e-commerce brasileiro), com texto, tabela e gráfico -- construído
 em três passos didáticos:
