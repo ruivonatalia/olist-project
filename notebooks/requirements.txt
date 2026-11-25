@@ -1,0 +1,10 @@
+# ambiente leve só pra análise/exploração via notebook -- não reaproveita
+# o requirements.txt principal (torch/sentence-transformers/langchain não
+# fazem falta aqui, é só SQL + pandas).
+jupyterlab
+ipykernel
+jupysql
+sqlalchemy
+psycopg2-binary
+pandas
+python-dotenv
