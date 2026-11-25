@@ -1,0 +1,44 @@
+[
+  {
+    "id": "ticket_medio",
+    "question": "Qual o ticket médio dos pedidos?",
+    "expected_chunk": "ticket_medio",
+    "expected_sql": "SELECT AVG(order_total) FROM (SELECT order_id, SUM(price + freight_value) AS order_total FROM raw.order_items GROUP BY order_id) t",
+    "scalar": true
+  },
+  {
+    "id": "receita_total",
+    "question": "Qual a receita total da plataforma?",
+    "expected_chunk": "receita_total",
+    "expected_sql": "SELECT SUM(price + freight_value) FROM raw.order_items",
+    "scalar": true
+  },
+  {
+    "id": "tempo_medio_entrega",
+    "question": "Qual o tempo médio de entrega dos pedidos, em dias?",
+    "expected_chunk": "tempo_medio_entrega",
+    "expected_sql": "SELECT EXTRACT(EPOCH FROM AVG(order_delivered_customer_date - order_purchase_timestamp)) / 86400.0 FROM raw.orders WHERE order_delivered_customer_date IS NOT NULL",
+    "scalar": true
+  },
+  {
+    "id": "taxa_atraso",
+    "question": "Qual o percentual de pedidos entregues com atraso?",
+    "expected_chunk": "taxa_atraso",
+    "expected_sql": "SELECT 100.0 * SUM(CASE WHEN order_delivered_customer_date > order_estimated_delivery_date THEN 1 ELSE 0 END) / COUNT(*) FROM raw.orders WHERE order_delivered_customer_date IS NOT NULL",
+    "scalar": true
+  },
+  {
+    "id": "nota_media_avaliacao",
+    "question": "Qual a nota média das avaliações dos clientes?",
+    "expected_chunk": "nota_media_avaliacao",
+    "expected_sql": "SELECT AVG(review_score) FROM raw.reviews",
+    "scalar": true
+  },
+  {
+    "id": "tickets_por_status",
+    "question": "Quantos tickets de suporte existem por status?",
+    "expected_chunk": "tickets_por_status",
+    "expected_sql": "SELECT status, COUNT(*) FROM raw.support_tickets GROUP BY status",
+    "scalar": false
+  }
+]

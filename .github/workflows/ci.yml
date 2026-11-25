@@ -1,0 +1,53 @@
+name: CI (data + retrieval + response gates)
+
+# Mesmo padrão das aulas de CI/CD para ML/LLM: 3 gates em sequência,
+# fail-fast -- se um falha, os seguintes nem rodam. Gate 1 e 2 só leem o
+# Postgres (role rag_reader, só-leitura) e não chamam a Anthropic; Gate 3
+# roda o agente de verdade (custo pequeno de API), por isso só dispara em
+# pull_request (não em todo push de branch) e pode ser rodado manualmente.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  gate-1-data-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - name: Gate 1 -- data validation
+        env:
+          OLIST_PG_READER_DSN: ${{ secrets.OLIST_PG_READER_DSN }}
+        run: python -m gates.validate_data
+
+  gate-2-retrieval-eval:
+    needs: gate-1-data-validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - name: Gate 2 -- retrieval eval
+        run: python -m gates.eval_retrieval
+
+  gate-3-response-quality:
+    needs: gate-2-retrieval-eval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - name: Gate 3 -- response quality
+        env:
+          OLIST_PG_READER_DSN: ${{ secrets.OLIST_PG_READER_DSN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python -m gates.eval_response
