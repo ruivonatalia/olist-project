@@ -1,0 +1,7 @@
+# Namespace isolado pros agentes sintéticos -- não é obrigatório (dava pra
+# usar o "default"), mas é a forma padrão de organizar recursos
+# relacionados num cluster K8s, então vale aprender o hábito desde já.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: olist-agents

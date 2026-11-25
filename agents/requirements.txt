@@ -1,0 +1,4 @@
+anthropic
+httpx
+psycopg2-binary
+python-dotenv

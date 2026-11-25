@@ -1,0 +1,33 @@
+# CronJob = o recurso do Kubernetes que diz "roda este container nesse
+# horário, de novo e de novo". Cada disparo cria um Job novo, que por sua
+# vez cria um Pod (que roda o container e termina -- não fica de pé).
+#
+# image: olist-agents:local -- construída localmente (`docker build`), sem
+# precisar de um registry, porque o Kubernetes do Docker Desktop enxerga
+# as mesmas imagens que o `docker images` lista. `imagePullPolicy:
+# IfNotPresent` evita que o K8s tente baixar de um registry remoto (que
+# não existe pra esta imagem).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: olist-synthetic-agents
+  namespace: olist-agents
+spec:
+  schedule: "0 * * * *"  # todo início de hora -- ajuste pra "*/5 * * * *" (cada 5 min) se quiser ver rodar mais rápido enquanto testa
+  concurrencyPolicy: Forbid  # não deixa uma rodada começar se a anterior ainda não terminou
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600  # mata o Job se passar de 10 min (trava de segurança)
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: agents
+              image: olist-agents:local
+              imagePullPolicy: IfNotPresent
+              envFrom:
+                - secretRef:
+                    name: olist-agents-secrets

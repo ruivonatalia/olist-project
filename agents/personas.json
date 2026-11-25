@@ -1,0 +1,18 @@
+[
+  {
+    "name": "cliente_atraso",
+    "description": "um cliente de e-commerce preocupado com o prazo de entrega dos seus pedidos"
+  },
+  {
+    "name": "gestor_vendas",
+    "description": "um gestor de vendas querendo entender receita, ticket médio e desempenho comercial da plataforma"
+  },
+  {
+    "name": "suporte",
+    "description": "uma pessoa da equipe de atendimento investigando tickets de suporte e reclamações de clientes"
+  },
+  {
+    "name": "analista_pagamentos",
+    "description": "um analista financeiro curioso sobre formas de pagamento, parcelamento e valores pagos pelos clientes"
+  }
+]

@@ -12,6 +12,9 @@ em três passos didáticos:
    LangChain usa um servidor MCP para descobrir o schema (embeddings) e
    rodar SQL com uma credencial restrita a leitura.
 3. [**Deploy**](docs/03-deploy.md) -- aplicação publicada no Render.
+4. [**Agentes sintéticos via Kubernetes**](docs/05-k8s-agentes.md) --
+   personas simulam perguntas de usuários reais, de hora em hora, via
+   Docker + K8s local.
 
 ## Estrutura
 
@@ -32,6 +35,9 @@ sql/rag_log_schema.sql       # log de retrieval (app.rag_query_log)
 
 web/main.py                  # API (POST /api/ask)
 web/static/                   # chat (HTML/CSS/JS + Plotly via CDN)
+
+agents/run_agents.py         # personas sintéticas (Claude gera a pergunta, manda pro /api/ask)
+k8s/cronjob.yaml             # roda agents/ de hora em hora (Kubernetes)
 
 render.yaml                  # blueprint de deploy (Render)
 ```
