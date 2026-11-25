@@ -35,3 +35,53 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: "3.13"
+
+  # Segunda instância do MESMO app -- o alvo de canary release. O Render
+  # cria este serviço acompanhando a branch do blueprint (main); depois
+  # de criado, troque a branch pra `canary` nas Settings do serviço no
+  # painel do Render (Build & Deploy > Branch) -- ver docs/04-canary.md.
+  - type: web
+    name: olist-project-canary
+    runtime: python
+    plan: standard
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn web.main:app --host 0.0.0.0 --port $PORT"
+    disk:
+      name: hf-cache-canary
+      mountPath: /data
+      sizeGB: 2
+    envVars:
+      - key: HF_HOME
+        value: /data/hf-cache
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OLIST_PG_DSN
+        sync: false
+      - key: OLIST_PG_READER_DSN
+        sync: false
+      - key: SITE_PASSWORD
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.13"
+
+  # Roteador de canary (router/app.py): fica na frente de olist-project
+  # (stable) e olist-project-canary, divide o tráfego por peso e reverte
+  # sozinho se o canário errar mais que o stable. É leve (sem embeddings
+  # nem LLM aqui) -- não precisa de disco nem de plano standard.
+  - type: web
+    name: olist-project-router
+    runtime: python
+    plan: starter
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn router.app:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: STABLE_URL
+        sync: false
+      - key: CANARY_URL
+        sync: false
+      - key: CANARY_WEIGHT
+        value: "5"
+      - key: SITE_PASSWORD
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.13"

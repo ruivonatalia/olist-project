@@ -22,3 +22,6 @@ langchain-mcp-adapters
 # interface web (chat)
 fastapi
 uvicorn[standard]
+
+# roteador de canary release (router/app.py)
+httpx

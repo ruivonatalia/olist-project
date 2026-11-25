@@ -4,7 +4,7 @@
 
 Chat web que responde perguntas em português sobre o dataset público da
 Olist (e-commerce brasileiro), com texto, tabela e gráfico -- construído
-em três passos didáticos:
+em passos didáticos:
 
 1. [**Ingestão**](docs/01-ingestao.md) -- CSVs do Kaggle + MongoDB
    carregados num Postgres (Supabase), schema `raw`.
@@ -12,6 +12,13 @@ em três passos didáticos:
    LangChain usa um servidor MCP para descobrir o schema (embeddings) e
    rodar SQL com uma credencial restrita a leitura.
 3. [**Deploy**](docs/03-deploy.md) -- aplicação publicada no Render.
+4. [**Canary release**](docs/04-canary.md) -- roteador que divide
+   tráfego entre uma versão estável e uma candidata, com rollback
+   automático por taxa de erro.
+
+CI (`gates/`) roda em cada PR: valida o schema `raw`, mede recall@k do
+retrieval, e compara a resposta do agente contra o valor real no banco --
+ver [.github/workflows/ci.yml](.github/workflows/ci.yml).
 
 ## Estrutura
 
@@ -32,6 +39,9 @@ sql/rag_log_schema.sql       # log de retrieval (app.rag_query_log)
 
 web/main.py                  # API (POST /api/ask)
 web/static/                   # chat (HTML/CSS/JS + Plotly via CDN)
+
+gates/                        # CI: data validation, retrieval eval, response quality
+router/app.py                 # roteador de canary release (stable vs. canary)
 
 render.yaml                  # blueprint de deploy (Render)
 ```
